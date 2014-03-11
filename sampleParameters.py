@@ -32,76 +32,74 @@ class sample:
 		# self.bandPower = fft_bandpower(self.sample,self.sampleRate,self.bands)
 		
 	# set of functions to calculate the 3 hjorth parameters for a signal    
-	def hjorth(self, x, dt):
-		return np.array([self.activity(x), self.mobility(x, dt), self.complexity(x, dt)])
+	def hjorth(self):
+		return np.array([self.activity(), self.mobility(), self.complexity()])
 		
-	def activity(self, x):
-		return np.std(x)
+	def activity(self):
+		return np.std(self.x)
 	
-	def mobility(self, x):
-		dev = np.diff(x,n=1,axis=0)/self.dt
-		return (self.activity(dev)/self.activity(x))**0.5
+	def mobility(self):
+		dev = sample(np.diff(self.x,n=1,axis=0)/self.dt,self.sampleRate)
+		return (dev.activity()/self.activity())**0.5
 
-	def complexity(self, x):
-		dev = np.diff(x,n=1,axis=0)/self.dt
-		return self.mobility(dev)/self.mobility(x)
+	def complexity(self):
+		dev = sample(np.diff(self.x,n=1,axis=0)/self.dt,self.sampleRate)
+		return dev.mobility()/self.mobility()
 	
 	#Helper function to generate spectral power density
-	def spectralPower(self, x):
+	def spectralPower(self):
 		#We take the magnitude of the FFT and square its magnitude to 
 		#find spectral coefficients that correspond to power        
-		fft = np.fft.fft(x) #V
+		fft = np.fft.fft(self.x) #V
 		spectralCoeffs = np.absolute(fft)**2 #V^2 (approximates power)
 		return spectralCoeffs
-		
-	def find_nearest(array,value):
-		idx = (np.abs(array-value)).argmin()
-		return array[idx]
 
 	# function to calculate harmonic parameters
-	def harmonic(self, x):
+	def harmonic(self, bands=np.array([[0,30]])):
 		#returns numpy.matrix
 		#rows are bands, and columns are each parameter (# of bands x 3 matrix)
-		assert self.bands.shape[1] == 2        
-		spectralCoeffs = self.spectralPower(x)
+		assert bands.shape[1] == 2        
+		spectralCoeffs = self.spectralPower()
 		# freq = np.fftfreq(len(x),1/self.sampleRate)
-		freq = np.fft.fftfreq(len(x), self.dt)
+		freq = np.fft.fftfreq(len(self.x), self.dt)
 		fc = []
 		fsig = []
 		cenPower = []
-		for i in np.arange(self.bands.shape[0]):
-			intReg = (freq>=self.bands[i][0]) & (freq<=self.bands[i][1])
+		for i in np.arange(bands.shape[0]):
+			intReg = np.where(freq[np.where(freq<bands[i,1])]>bands[i,0])
 			freqInt = freq[intReg]
 			specInt = spectralCoeffs[intReg]
-			fc_temp = sc.cumtrapz(specInt*freqInt,freqInt)/sc.cumtrapz(specInt,freqInt)
-			fsig_temp = (sc.cumtrapz((freqInt-fc_temp(-1))**2*specInt,freqInt)/sc.cumtrapz(specInt,freqInt))**0.5
-			cenPower_temp = spectralCoeffs[find_nearest(freq,fc_temp(-1))]
-			fc = np.append(fc,fc_temp(-1))
-			fsig = np.append(fsig,fsig_temp(-1))
-			cenPower = np.append(cenPower,cenPower_temp(-1))
+			fc_temp = sc.cumtrapz(freqInt*specInt,freqInt)/sc.cumtrapz(specInt,freqInt)
+			fsig_temp = (sc.cumtrapz((freqInt-fc_temp[-1])**2*specInt,freqInt)/sc.cumtrapz(specInt,freqInt))**.5
+			cenPower_temp = spectralCoeffs[find_nearest(freq,fc_temp[-1])]
+			fc = np.append(fc,fc_temp[-1])
+			fsig = np.append(fsig,fsig_temp[-1])
+			cenPower = np.append(cenPower,cenPower_temp)
 		harmResult = np.hstack((fc,fsig,cenPower))
 		return harmResult
 	
 	# function to calculate FFT and power spectra
-	def fft_bandpower(self, x):
-		print self.bands
+	def fft_bandpower(self):
 		#returns array
 		#each band is its own column, corresponding to each row of "bands"
 		assert self.bands.shape[1] == 2
 		#We then take the cumulative integral of the spectral
 		#power density so we can calculate the power of each
 		#band
-		freq = np.fft.fftfreq(len(x), self.dt)
-		cumPower = sc.cumtrapz(self.spectralPower(x),freq)
+		freq = np.fft.fftfreq(len(self.x), self.dt)
+		cumPower = sc.cumtrapz(self.spectralPower(),freq)
 		bandPower = []
 		for i in np.arange(self.bands.shape[0]):
-			intReg = (freq>=self.bands[i][0]) & (freq<=self.bands[i][1])
-			print intReg
-			bandPower = np.append(bandPower,cumPower[intReg[-1]]-cumPower[intReg[0]])
+			start = find_nearest(freq,self.bands[i,0])
+			ending = find_nearest(freq,self.bands[i,1])
+			bandPower = np.append(bandPower,cumPower[ending]-cumPower[start])
 		return bandPower
 			
 	#function to return the default feature vector    
 	# <Hjorth (3 params), HarmonicAll(3 params), bandPower(# bands params)
 	def featureVector(self):
-		return np.append(self.hjorth,self.harmonicAllSignal,self.bandPower)
+		return np.append(np.append([self.hjorth()],[self.harmonic()]),[self.fft_bandpower()])
 
+def find_nearest(array,value):
+	idx = (np.abs(array-value)).argmin()
+	return idx
