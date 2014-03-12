@@ -5,20 +5,35 @@ Created on Thur Mar 06 22:01:22 2014
 @author: James Ahad
 """
 
+"""
+TESTING NOTES (3/11/14)
+Working:
+    __init__
+    hjorth
+    activity
+    mobility
+    complexity
+    spectralPower
+    harmonic
+    fft_bandpower
+    featureVector
+    find_nearest
+"""
+
+
 import numpy as np
 from scipy import integrate as sc
 class sample:
 	#x = sample of sample size n
 	#sampleRate = sample rate of input sample in Hz
-	#bands = frequency bands of data to analyze, 
+	#bands = frequency bands of data to analyze,
 	#        defaults one band of 0Hz-30Hz
-	def __init__(self,x,sampleRate,bands=np.array([[0,30]])):
+	def __init__(self,x,sampleRate,bands=np.array([[0,30]]),stageAnnotation=-1):
 		assert bands.shape[1] == 2
 		self.x = x
 		self.sampleRate = sampleRate
 		self.dt = 1.0/self.sampleRate
 		self.bands = bands
-
 		''' FIXME: What can we calculate immediately, vs. put off until later?
 			We should do certain calclations on initialization, like dt, since
 			it is invariant across all functions.
@@ -30,14 +45,14 @@ class sample:
 		# self.harmonicAllSignal = self.harmonic(self.sample,self.sampleRate)
 		# self.harmonicBanded = self.harmonic(self.sample,self.sampleRate,self.bands)
 		# self.bandPower = fft_bandpower(self.sample,self.sampleRate,self.bands)
-		
-	# set of functions to calculate the 3 hjorth parameters for a signal    
+
+	# set of functions to calculate the 3 hjorth parameters for a signal
 	def hjorth(self):
 		return np.array([self.activity(), self.mobility(), self.complexity()])
-		
+
 	def activity(self):
 		return np.std(self.x)
-	
+
 	def mobility(self):
 		dev = sample(np.diff(self.x,n=1,axis=0)/self.dt,self.sampleRate)
 		return (dev.activity()/self.activity())**0.5
@@ -45,11 +60,11 @@ class sample:
 	def complexity(self):
 		dev = sample(np.diff(self.x,n=1,axis=0)/self.dt,self.sampleRate)
 		return dev.mobility()/self.mobility()
-	
+
 	#Helper function to generate spectral power density
 	def spectralPower(self):
-		#We take the magnitude of the FFT and square its magnitude to 
-		#find spectral coefficients that correspond to power        
+		#We take the magnitude of the FFT and square its magnitude to
+		#find spectral coefficients that correspond to power
 		fft = np.fft.fft(self.x) #V
 		spectralCoeffs = np.absolute(fft)**2 #V^2 (approximates power)
 		return spectralCoeffs
@@ -58,7 +73,7 @@ class sample:
 	def harmonic(self, bands=np.array([[0,30]])):
 		#returns numpy.matrix
 		#rows are bands, and columns are each parameter (# of bands x 3 matrix)
-		assert bands.shape[1] == 2        
+		assert bands.shape[1] == 2
 		spectralCoeffs = self.spectralPower()
 		# freq = np.fftfreq(len(x),1/self.sampleRate)
 		freq = np.fft.fftfreq(len(self.x), self.dt)
@@ -77,7 +92,7 @@ class sample:
 			cenPower = np.append(cenPower,cenPower_temp)
 		harmResult = np.hstack((fc,fsig,cenPower))
 		return harmResult
-	
+
 	# function to calculate FFT and power spectra
 	def fft_bandpower(self):
 		#returns array
@@ -94,12 +109,13 @@ class sample:
 			ending = find_nearest(freq,self.bands[i,1])
 			bandPower = np.append(bandPower,cumPower[ending]-cumPower[start])
 		return bandPower
-			
-	#function to return the default feature vector    
+
+	#function to return the default feature vector
 	# <Hjorth (3 params), HarmonicAll(3 params), bandPower(# bands params)
 	def featureVector(self):
 		return np.append(np.append([self.hjorth()],[self.harmonic()]),[self.fft_bandpower()])
 
+#helper function that returns the index of the value in array "array" where the value is closest to "value"
 def find_nearest(array,value):
 	idx = (np.abs(array-value)).argmin()
 	return idx
