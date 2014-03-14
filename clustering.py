@@ -14,7 +14,7 @@ Working:
 import datetime as dt
 import numpy as np
 #import pyplot as pyp
-from sklearn.decomposition import PCA
+from sklearn.decomposition import KernelPCA
 from sampleParameters import sample
 
 
@@ -26,7 +26,7 @@ class clusteredData:
 
     def __init__(self, dimensionality=3):
         self.dims = dimensionality
-        self.pca = PCA(self.dims, copy=False, whiten=True)
+        self.pca = KernelPCA(self.dims)
 
         self.pc_eigen = []
         self.pc_tstamp = []
@@ -69,7 +69,7 @@ class clusteredData:
                 featureVectors = np.vstack((featureVectors, self.samples[i].featureVector()))
 
         #Analyze the given block size and dump only the most recent eigenvector
-        if self.pc_eigen == []:
-            self.pc_eigen = self.pca.fit_transform(featureVectors)[-1,:]
-        else:
-            self.pc_eigen = np.vstack((self.pc_eigen, self.pca.fit_transform(featureVectors)[-1,:]))
+        #if self.pc_eigen == []:
+        self.pc_eigen = self.pca.fit_transform(featureVectors)#[-1,:]
+        #else:
+        #    self.pc_eigen = np.vstack((self.pc_eigen, self.pca.fit_transform(featureVectors)[-1,:]))
