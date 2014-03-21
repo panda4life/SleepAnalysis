@@ -11,6 +11,8 @@ Working:
     __init__
     appendSample
     analyze
+    initialLearn
+    kmeansDist
 """
 import datetime as dt
 import numpy as np
@@ -41,13 +43,13 @@ class clusteredData:
         self.alpha = np.array([8, 12])
         self.beta = np.array([12, 30])
 
-    def appendSample(self, x, sampleRate,timestamp=None):
+    def appendSample(self, x, sampleRate, timestamp=None, category=-1):
         if(timestamp is None):
             self.sp_tstamp = np.append(self.sp_tstamp,dt.datetime.now())
         else:
             self.sp_tstamp = np.append(self.sp_tstamp,timestamp)
         bands = np.vstack([self.delta, self.theta, self.alpha, self.beta])
-        newSample = sample(x, sampleRate, bands)
+        newSample = sample(x, sampleRate, bands, category)
         self.samples = np.append(self.samples, newSample)
         return newSample
 
@@ -74,55 +76,42 @@ class clusteredData:
         #else:
         #    self.pc_eigen = np.vstack((self.pc_eigen, self.pca.fit_transform(featureVectors)[-1,:]))
 
-    def initialLearn(self, sampleSet, categoryVector, ncategories = -1, categories = []):
-        if(len(self.samples)!=0):
-            print('Cannot learn when data is already input, Exiting')
+    def initialLearn(self, categories = set()):
+        if(len(self.samples)==0):
+            print('Cannot learn with no learning set. Exiting')
             return
-        if(len(sampleSet) != len(categoryVector)):
-            print('Each sample must have a matched category, Exiting')
+        if(self.haveLearned):
+            print('Categories have already been parsed and learned')
             return
-        self.sampleClass = categoryVector
-        if(ncategories == -1):
-            if(len(categories) == 0): #Does not enter ncats or cats
-                ncategories = max(self.category)
-                self.categories = np.arange(0,ncategories)
-            else: #Does not enter ncats, but gives cats
-                ncategories = len(categories)
-                self.categories = categories
-        elif(len(categories) == 0): #Enters ncats but does not give cats
-            self.categories = np.arange(0,ncategories)
-        else: #Enters both ncats and cats
-            if(ncategories != len(categories)):
-                print('Specified number of categories is not equal to the number of given categories, Exiting')
-                return
+        if(len(categories) == 0): #Does not enter cats
             self.categories = categories
-        for i in np.arange(0,len(sampleSet)):
-            self.appendSample(sampleSet(i))
+            for s in self.samples:
+                self.categories.add(s.category)
+        else:
+            for s in self.samples:
+                if s.category not in categories:
+                    print('Category %s not in list' % self.samples[i].category)
+                    return
+            self.categories = categories
+
+        self.analyze()
         self.haveLearned = True
 
-    def kmeans_dist(self, sampleIndex, categoryIndex=-1, category=None):
+    def kmeansDist(self, sampleIndex, category):
         catSet = []
         if(self.haveLearned == False):
             print('Dataset has not been learned, kmeans_dist cannot be computed. Exiting')
             return
-        if(category == None and categoryIndex == -1): #Did not specify any category
-            print('Please specify classification to compute distance to. Exiting')
-            return
-        elif(categoryIndex == -1 and category != None): #Entered only category index
-            catSet = np.where(self.sampleClass == self.categories(categoryIndex))
-        elif(categoryIndex != -1 and category == None): #Entered only category
-            catSet = np.where(self.sampleClass == category)
-        elif(categoryIndex != -1 and category != None):
-            if(self.categories(categoryIndex) != category): #Entered both but doesnt match
-                print('Entered categoryIndex does not match entered category. Exiting')
-                return
-            else: #Entered both and matches, default to searching based on category
-                catSet = np.where(self.sampleClass == category)
-        if(sampleIndex > len(self.pc_eigen) or (sampleIndex < 0 and len(self.pc_eigen)<len(self.samples))):
-            self.analyze()
 
+        #the vector of indices of self.samples in which the samples are categorized as a given category
+        catSet = [i for i,s in enumerate(self.samples) if(s.category==category)]
         nPriorSamples = len(catSet)
-        kmeans = 0;
+
+        #if there exist samples that have not been analyzed, do dim reduction    
+        if(len(self.samples)>len(self.pc_eigen)):
+            self.analyze()
+        
+        kmeans = 0
         for i in catSet:
             dist2 = 0
             for j in np.arange(0,self.dims):
@@ -131,6 +120,11 @@ class clusteredData:
         return kmeans
 
     def classifyNewSamples(self):
+        '''
+        FIXME:
+        Cut data set in half and remove annotations 
+        Used learned set to categorize using kmean min distance
+        '''
         if(len(self.sampleClass) == len(self.samples)):
             print('No new samples to classify. Exiting')
             return
@@ -145,3 +139,4 @@ class clusteredData:
                     minDist = kmeans
                     classification = self.categories[catInd]
             self.sampleClass = np.append(self.sampleClass,classification)
+

@@ -28,12 +28,13 @@ class sample:
 	#sampleRate = sample rate of input sample in Hz
 	#bands = frequency bands of data to analyze,
 	#        defaults one band of 0Hz-30Hz
-	def __init__(self,x,sampleRate,bands=np.array([[0,30]]),stageAnnotation=-1):
+	def __init__(self,x,sampleRate,bands=np.array([[0,30]]),category=-1):
 		assert bands.shape[1] == 2
 		self.x = x
 		self.sampleRate = sampleRate
 		self.dt = 1.0/self.sampleRate
 		self.bands = bands
+		self.category = category
 		''' FIXME: What can we calculate immediately, vs. put off until later?
 			We should do certain calclations on initialization, like dt, since
 			it is invariant across all functions.
