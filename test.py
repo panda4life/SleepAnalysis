@@ -14,6 +14,11 @@ import sys
 #sampleRate = 100  # Hz
 
 annotations = []
+
+# 50-50 split of first half of SC4001E0-PSG_data.txt respectively
+training_data = "../EEG_data/training.txt"
+testing_data = "../EEG_data/testing.txt"
+
 print('Loading annotation file')
 with open("../EEG_data/SC4001EC-Hypnogram_annotations.txt") as f:
     header = f.readline()
@@ -21,6 +26,8 @@ with open("../EEG_data/SC4001EC-Hypnogram_annotations.txt") as f:
         line = line.strip()
         columns = line.split(',')
         stageNo = -1
+
+        # consolidating (R,1)=1, (2)=2, (3,4)=3, (W)=4
         if(columns[2] == 'Sleep stage 1'):
             stageNo = 1
         elif(columns[2] == 'Sleep stage 2'):
@@ -28,9 +35,9 @@ with open("../EEG_data/SC4001EC-Hypnogram_annotations.txt") as f:
         elif(columns[2] == 'Sleep stage 3'):
             stageNo = 3
         elif(columns[2] == 'Sleep stage 4'):
-            stageNo = 4
+            stageNo = 3
         elif(columns[2] == 'Sleep stage R'):
-            stageNo = 5
+            stageNo = 1
         elif(columns[2] == 'Sleep stage W'):
             stageNo = 0
         else:
@@ -51,55 +58,81 @@ def grabAnnotation(time):
     stage = annotations[annotationIndex][2]
     return stage
 
+
+def loadData(filename, clusterProc, sampleRate=100, sampleDuration=30, sampleOverlap=15, numLines=400000, doAnnotations=False):
+    print('Loading data file')
+    data = []
+    with open(filename) as f:
+        header = f.readline()
+        linecount = 0
+        # avoid reading whole file into memory
+        for line in f:
+            line = line.strip()
+            columns = line.split(',')
+            # first run
+            if(data == []):
+                data = [float(columns[0]),float(columns[1]),float(columns[2])]
+            else:
+                dataVec = [float(columns[0]),float(columns[1]),float(columns[2])]
+                data = np.vstack((data,dataVec))
+            linecount += 1
+            # when buffer reaches sampleDuration keep overlap for the next sampling and drop the data we're done with
+            if(len(data) == sampleDuration*sampleRate):
+                data_tstamp = data[0,0]
+                anno = -1
+                if doAnnotations:
+                    anno = grabAnnotation(data_tstamp)
+                clusterProc.appendSample(data[:,1], sampleRate, data_tstamp, anno)
+                data = data[(-sampleOverlap)*sampleRate:]
+            if(linecount%10000 == 0):
+                print('' + str(linecount) + '\tlines loaded')
+            if(linecount > numLines):
+                break
+    print('Opening File Complete')
+
 print('Declare Initial Cluster Processor')
+
+
+# with open("../EEG_data/SC4001E0-PSG_data.txt") as f:
 clusterProc = clusteredData(3)  # 3 dimensional clustered eigenvector
-sampleRate = 100 #lines/s
-sampleDuration = 30 #seconds
-sampleOverlap = 15 #seconds
-data = []
-print('Loading data file')
-with open("../EEG_data/SC4001E0-PSG_data.txt") as f:
-    header = f.readline()
-    linecount = 0
-    # avoid reading whole file into memory
-    for line in f:
-        line = line.strip()
-        columns = line.split(',')
-        # first run
-        if(data == []):
-            data = [float(columns[0]),float(columns[1]),float(columns[2])]
-        else:
-            dataVec = [float(columns[0]),float(columns[1]),float(columns[2])]
-            data = np.vstack((data,dataVec))
-        linecount += 1
-        # when buffer reaches sampleDuration keep overlap for the next sampling and drop the data we're done with
-        if(len(data) == sampleDuration*sampleRate):
-            data_tstamp = data[0,0]
-            clusterProc.appendSample(data[:,1], sampleRate, data_tstamp, grabAnnotation(data_tstamp))
-            data = data[(-sampleOverlap)*sampleRate:]
-        if(linecount%10000 == 0):
-            print('' + str(linecount) + ' lines loaded')
-        if(linecount > 360000):
-            break
-print('Opening File Complete')
-
+loadData(training_data, clusterProc, doAnnotations=True)
 clusterProc.initialLearn()
-print clusterProc.kmeansDist(1, 2)
+# print clusterProc.kmeansDist(1, 2)
+# sys.exit(1)
 
-sys.exit(1)
+loadData(testing_data, clusterProc, doAnnotations=False)
+clusterProc.classifyNewSamples()
 
+dummyCluster = clusteredData(3)
+loadData(testing_data,dummyCluster, doAnnotations=True)
+dummyCluster.initialLearn()
+
+
+countSimilarities = 0
+
+dummyLen = len(dummyCluster.samples)
+for i in range(0, dummyLen):
+    assert(clusterProc.sp_tstamp[i+dummyLen] == dummyCluster.sp_tstamp[i])
+    
+    print "Asserted/Correct:", clusterProc.samples[i+dummyLen].category, dummyCluster.samples[i].category
+
+    if(clusterProc.samples[i+dummyLen].category == dummyCluster.samples[i].category):
+        countSimilarities += 1
+print(float(countSimilarities)/dummyLen*100)
 # amp = data[:,1]
 # s = sample(amp, 100.0, bands=sp.array([ [5,10] , [0,5] ]) )
 # sampleParameters has been fully tested for correctness
 
 
 
-print('Start cluster analysis')
+# print('Start cluster analysis')
 """
 for i in np.arange(0, data.shape[0] - 30 * sampleRate, 15*sampleRate):
     dataSelect = np.arange(i, i + 30 * sampleRate)
     x = data[dataSelect, 1]
 """    
+
+"""
 clusterProc.analyze()
 
 fig1 = plt.figure()
@@ -138,3 +171,5 @@ ax = fig2.add_subplot(111,projection='3d')
 ax.scatter(clusterProc.pc_eigen[:,0],clusterProc.pc_eigen[:,1],clusterProc.pc_eigen[:,2])
 print(clusterProc.pc_eigen.shape)
 plt.show()
+
+"""
